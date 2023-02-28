@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <math.h>
 
 void insertion_sort(int* arr, int size) {
     int i, key, j;
@@ -16,10 +18,6 @@ void insertion_sort(int* arr, int size) {
 }
 
 void merge_sort(int* arr, int size) {
-
-    // if (size < 8) {
-    //     return insertion_sort(arr, size);
-    // }
 
     if (size == 1) {
         return;
@@ -69,65 +67,141 @@ void merge_sort(int* arr, int size) {
 
 }
 
+
+/*
+    compare and swap if needed
+    asc: determines if its ascending or descending order
+*/ 
+
+void swap(int* arr, int i, int j, int asc) {
+    if (asc && arr[i] > arr[j]) {
+        int temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+    else if(!asc && arr[i] < arr[j]) {
+        int temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+    
+}
+
+/*
+    Organize the array in mutiple bitonic sequences                 / \ / \ / \ / \ / \ / \ / \ / \ 
+    and then merge them in alternating ascending                    /   \   /   \   /   \   /   \
+    and descending order to form a new  set of                      /       \       /       \
+    bitonic sequences, repeat until its ordered.                    /               \
+                                                                    /
+*/
+
+void bitonic_merge(int* arr, int size, int start, int asc) {
+
+    int v = size >> 1;
+    int nL = 1;
+    int n, u;
+    for (int m = 0; m < log2(size); m++) {
+        n = 0;
+        u = 0;
+        while (n < nL) {
+            for (int t = 0; t < v; t++) {
+                swap(arr, start+t+u, start+t+u+v, asc);    
+            }
+            u += (v << 1);
+            n += 1;
+        }
+        v >>= 1;
+        nL <<= 1;
+    }
+}
+
+int bitonic_sort(int* arr, int size) {
+    
+    if ((size & (size - 1)) != 0) {
+        printf("Array must be power of two!");
+        return 1;
+    } 
+    for (int j = 1; j <= log2(size); j++) {
+        int is_asc = 1;
+        int N = pow(2, j);
+        for (int i = 0; i < size; i += N) {
+            bitonic_merge(arr, N, i, is_asc);
+            is_asc = !is_asc;
+        }
+    }
+    return 0;
+}
+
 void sort_file(char* filename, char sorting_alg) {
 
-    FILE* file = fopen(filename, "r");
+    FILE* file = fopen(filename, "rb");
     if (file == NULL) {
         printf("Error opening file %s", filename);
         return;
     }
 
-    int capacity = 10;
-    int* arr = (int*) malloc(capacity * sizeof(int));
     int size = 0;
-    printf("Before Sort: ");
-    while (!feof(file))
-    {
-        // Increase array size if needed
-        if (size == capacity) {
-            capacity *= 2;
-            int *new_array = realloc(arr, capacity * sizeof(int));
-            if (new_array == NULL) {
-                printf("Error allocating memory\n");
-                free(arr);
-                return;
-            }
-            arr = new_array;
+    int res = fread(&size, sizeof(int), 1, file);
+    if (ferror(file)) {
+        printf("Invalid file format\n");
+        return;
+    }
+
+    int* arr = (int*) malloc(size * sizeof(int));
+    int count = 0;
+    //printf("Before Sort: ");
+    while (1) {
+        res = fread(&arr[count++], sizeof(int), 1, file);
+        if (feof(file)) {
+            break;
         }
-        int res = fscanf(file, "%d", &arr[size++]);
-        if (res != 1) {
+        else if (ferror(file)) {
             printf("Invalid file format\n");
             return;
         }
-
-        printf("%d ", arr[size-1]);
+        //printf("%d, ", arr[count-1]);
     }
+
+    if (res != 0) {
+        printf("Some Unexpected error occured\n");
+        return;
+    }
+
     printf("\n");
-    printf("---------------\n");
 
     if (sorting_alg == 'm') {
         merge_sort(arr, size);
+    }
+    else if (sorting_alg == 'b') {
+        bitonic_sort(arr, size);
     }
     else if (sorting_alg == 'i')
     {
         insertion_sort(arr, size);
     }
     
+    // printf("After Sort: ");
+    // for (int j = 0; j < size; j++) {
+    //     printf("%d, ", arr[j]);
+    // }
+    // printf("\n");
 
-    printf("After Sort: ");
-    for (int j = 0; j < size; j++) {
-        printf("%d ", arr[j]);
+    int i;
+    for (i = 0; i < size - 1; i++) {
+        if (arr[i] > arr[i+1]){ 
+            printf ("Error in position %d between element %d and %d\n", i, arr[i], arr[i+1]);
+            break;
+        }
     }
-    printf("\n");
-    free(arr);
 
+    if (i == (size - 1)) {
+        printf ("Everything is OK!\n");
+    }
+
+    free(arr);
     fclose(file);
 
 }
-
-
-#include <stdio.h>
-#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
@@ -139,6 +213,7 @@ int main(int argc, char *argv[])
 	{
 		switch(opt)
 		{
+            case 'b':
             case 'm':
 			case 'i':
 				//printf("option: %c\n", opt);
@@ -150,6 +225,7 @@ int main(int argc, char *argv[])
                 printf("\n");
                 printf("\t-m\tmerge sort\n");
                 printf("\t-i\tinsertion sort\n");
+                printf("\t-b\tbitonic sort");
                 printf("\t-h\tdisplay help\n");
                 printf("\n");
                 return 0;
